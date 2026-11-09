@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tsv-merge"
+version = "0.1.0"
+description = "Merge two TSV files, appending rows from the second file whose key columns are not in the first."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Grzegorz Zima" }]
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+tsv-merge = "tsv_merge:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+py-modules = ["tsv_merge"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
