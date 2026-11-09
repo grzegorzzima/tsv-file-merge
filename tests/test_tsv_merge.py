@@ -83,16 +83,30 @@ def test_header_mismatch_is_error(run):
     assert out is None
 
 
+def test_quotes_are_plain_text_by_default(run):
+    base = b'1\tSymbol "Pilar\n2\tx"y\n'
+    extra = b'1\tdup\n3\t"open\n4\tz"\n'
+    code, out = run(base, extra, "-k", "1")
+    assert code == 0
+    assert out == base + b'3\t"open\n4\tz"\n'
+
+
+def test_keys_keep_quotes_by_default(run):
+    code, out = run(b'"1"\ta\n', b"1\tb\n", "-k", "1")
+    assert code == 0
+    assert out == b'"1"\ta\n1\tb\n'
+
+
 def test_quoted_fields_with_tabs_newlines_and_quotes(run):
     base = b'1\t"a\tb"\n2\t"multi\nline"\n'
     extra = b'2\tdup\n3\t"x ""q"""\n4\t"new\nline"\n'
-    code, out = run(base, extra, "-k", "1")
+    code, out = run(base, extra, "-k", "1", "--quoted")
     assert code == 0
     assert out == base + b'3\t"x ""q"""\n4\t"new\nline"\n'
 
 
 def test_quoted_key_matches_unquoted_value(run):
-    code, out = run(b'"1"\ta\n', b"1\tb\n", "-k", "1")
+    code, out = run(b'"1"\ta\n', b"1\tb\n", "-k", "1", "--quoted")
     assert code == 0
     assert out == b'"1"\ta\n'
 
@@ -150,7 +164,7 @@ def test_key_column_out_of_range_is_error(run):
 
 
 def test_unterminated_quote_is_error(run):
-    code, out = run(b"1\ta\n", b'2\t"open\n', "-k", "1")
+    code, out = run(b"1\ta\n", b'2\t"open\n', "-k", "1", "--quoted")
     assert code == 1
     assert out is None
 

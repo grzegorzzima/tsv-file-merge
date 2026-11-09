@@ -2,12 +2,17 @@
 """Merge two TSV files: keep every row of the base file and append the rows
 of the additional file whose key (one or more columns) is not present yet.
 
-Rows are written byte-for-byte as they appear in the inputs (quoting, line
+Rows are written byte-for-byte as they appear in the inputs (quotes, line
 endings and encoding are preserved). Input files are only ever read.
+
+By default every line is one row and double quotes are ordinary characters.
+With --quoted, CSV-style quoting is honoured: quoted fields may contain tabs
+and line breaks, and surrounding quotes are ignored when comparing keys.
 
 Examples:
     python tsv_merge.py base.tsv extra.tsv -k 1 -o merged.tsv
     python tsv_merge.py base.tsv extra.tsv -k 1,3 --header -o merged.tsv
+    python tsv_merge.py base.tsv extra.tsv -k 1 --quoted -o merged.tsv
 """
 
 import argparse
@@ -22,12 +27,17 @@ class MergeError(Exception):
     pass
 
 
-def read_records(f):
+def read_records(f, quoting=False):
     """Yield (raw_record, line_no) from a text file opened with newline=''.
 
-    A record may span several physical lines when a quoted field contains a
-    line break, so lines are joined until the quote count is balanced.
+    With quoting, a record may span several physical lines when a quoted field
+    contains a line break, so lines are joined until the quote count is
+    balanced. Without quoting, every line is one record.
     """
+    if not quoting:
+        for line_no, line in enumerate(f, 1):
+            yield line, line_no
+        return
     buf = []
     quotes = 0
     start = 1
@@ -51,7 +61,9 @@ def strip_eol(record):
     return record, ""
 
 
-def parse_fields(body):
+def parse_fields(body, quoting=False):
+    if not quoting:
+        return body.split("\t") if body else []
     return next(csv.reader([body], delimiter="\t", quotechar='"'), [])
 
 
@@ -75,7 +87,7 @@ def parse_key_columns(text):
     return [c - 1 for c in cols]
 
 
-def merge(base_path, extra_path, out_path, key_cols, header, encoding, skip_duplicates):
+def merge(base_path, extra_path, out_path, key_cols, header, encoding, skip_duplicates, quoting=False):
     stats = {"base": 0, "extra": 0, "added": 0, "skipped": 0}
     keys = set()
     column_count = None
@@ -87,11 +99,11 @@ def merge(base_path, extra_path, out_path, key_cols, header, encoding, skip_dupl
         last_had_eol = True
 
         with open(base_path, "r", **open_args) as f:
-            for i, (record, line_no) in enumerate(read_records(f)):
+            for i, (record, line_no) in enumerate(read_records(f, quoting)):
                 body, rec_eol = strip_eol(record)
                 if i == 0:
                     eol = rec_eol or eol
-                fields = parse_fields(body.lstrip(BOM) if i == 0 else body)
+                fields = parse_fields(body.lstrip(BOM) if i == 0 else body, quoting)
                 if column_count is None:
                     column_count = len(fields)
                 if i == 0 and header:
@@ -106,11 +118,11 @@ def merge(base_path, extra_path, out_path, key_cols, header, encoding, skip_dupl
             raise MergeError(f"{base_path}: key column {max(key_cols) + 1} exceeds {column_count} column(s)")
 
         with open(extra_path, "r", **open_args) as f:
-            for i, (record, line_no) in enumerate(read_records(f)):
+            for i, (record, line_no) in enumerate(read_records(f, quoting)):
                 if i == 0:
                     record = record.lstrip(BOM)
                 body, rec_eol = strip_eol(record)
-                fields = parse_fields(body)
+                fields = parse_fields(body, quoting)
                 if i == 0 and header:
                     if column_count is not None and fields != base_header:
                         raise MergeError(f"header of {extra_path} differs from header of {base_path}")
@@ -150,6 +162,9 @@ def main(argv=None):
                    help="encoding of both input files, also used for output (default: utf-8)")
     p.add_argument("--skip-duplicates", action="store_true",
                    help="when a new key repeats within EXTRA, add only its first row (default: add every row)")
+    p.add_argument("--quoted", action="store_true",
+                   help="honour CSV-style quoting: quoted fields may span lines and quotes are "
+                        "ignored in key comparison (default: every line is one row, quotes are plain text)")
     p.add_argument("-f", "--force", action="store_true", help="overwrite the output file if it exists")
     args = p.parse_args(argv)
 
@@ -165,7 +180,7 @@ def main(argv=None):
 
     try:
         stats = merge(args.base, args.extra, args.output, args.key, args.header,
-                      args.encoding, args.skip_duplicates)
+                      args.encoding, args.skip_duplicates, args.quoted)
     except (MergeError, LookupError) as e:
         if os.path.exists(args.output):
             os.remove(args.output)

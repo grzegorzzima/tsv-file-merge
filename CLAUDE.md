@@ -20,7 +20,7 @@ Single module `src/tsv_merge.py` (installed as a top-level module, not a package
 The core design constraint is **byte-exact output**: rows are never re-serialized. Keep this when changing anything:
 
 - Files are opened as text with `newline=""` (preserves `\r\n`/`\n`) and `errors="surrogateescape"` (round-trips bytes invalid in `--encoding`). The same encoding is used for output.
-- `read_records` groups physical lines into logical records by counting `"` until balanced, so quoted fields may contain tabs/newlines. Each raw record is written as-is; `csv.reader` is used only on a copy to extract fields for the key.
+- By default one line = one record, fields are split on `\t`, and `"` is literal text (real data contains values like `Symbol "Pilar` with unbalanced quotes). With `--quoted`, `read_records` groups physical lines into logical records by counting `"` until balanced and `csv.reader` parses the fields, so quoted fields may contain tabs/newlines. Either way, the raw record is written as-is; parsing only extracts fields for the key.
 - BOM: the base file's BOM is copied through; the extra file's BOM is stripped. If the base lacks a trailing newline, the base's line ending is inserted before appended rows.
 - Only base keys are held in memory; both files are streamed.
 
